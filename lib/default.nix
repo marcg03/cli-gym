@@ -27,9 +27,8 @@ let
     };
 
   # The thing you `nix run`: boots the challenge VM with its console on your terminal.
-  run = id: seed: runWith { inherit id seed; };
-  runWith = args:
-    let vm = (nixos args).config.microvm.declaredRunner;
+  run = id: seed:
+    let vm = (nixos { inherit id seed; }).config.microvm.declaredRunner;
     in vm // { meta = (vm.meta or { }) // { mainProgram = "microvm-run"; }; };
 
   # Self-test: unsolved world must fail `gym check`, reference solution must pass it.
@@ -57,9 +56,9 @@ let
     };
 
   catalog = lib.mapAttrs (id: _:
-    let c = evalChallenge id 1;
+    let c = evalChallenge id 0;
     in c.meta) challengeFiles;
 in
 {
-  inherit challengeFiles evalChallenge nixos run runWith selfTest catalog;
+  inherit challengeFiles evalChallenge nixos run selfTest catalog;
 }

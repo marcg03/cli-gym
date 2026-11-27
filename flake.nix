@@ -19,8 +19,18 @@
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f: lib.genAttrs systems (system: f system nixpkgs.legacyPackages.${system});
 
-      # Seeds that are pure flake outputs (prebuildable, cacheable, self-tested).
-      fixedSeeds = [ 1 2 3 4 5 ];
+      # One deterministic seed by default. For another one, pass it impurely:
+      #   GYM_SEED=42 nix run --impure .#sed-fix-config
+      # (without --impure, getEnv returns "" and you get the default seed; the VM shows which.)
+      defaultSeed = 0;
+      seedEnv = builtins.getEnv "GYM_SEED";
+      seed =
+        if seedEnv == "" then defaultSeed
+        else if builtins.match "[0-9]+" seedEnv != null then lib.toInt seedEnv
+        else throw "GYM_SEED must be a number, got '${seedEnv}'";
+
+      # Extra seeds the self-tests cover, so a challenge can't only work for one world.
+      testSeeds = [ defaultSeed 1 2 ];
 
       gymFor = system: pkgs: import ./lib {
         inherit lib pkgs system nixpkgs microvm;
@@ -28,38 +38,27 @@
       };
     in
     {
-      # lib.<system>.runWith { id; seed; kvm; } -> microVM runner (used by `gym start` for free-form seeds)
-      # lib.catalog / lib.fixedSeeds          -> metadata for `gym list` / `gym start`
+      # lib.<system>.* -> builders; lib.catalog -> metadata for `gym list`
       lib = forAllSystems (system: pkgs: gymFor system pkgs) // {
-        # Metadata for `gym list` (evaluated at seed 1).
         catalog = (gymFor "x86_64-linux" nixpkgs.legacyPackages.x86_64-linux).catalog;
-        inherit fixedSeeds;
       };
 
       packages = forAllSystems (
         system: pkgs:
-        let
-          gym = gymFor system pkgs;
-          perSeed = lib.concatMapAttrs (
-            id: _:
-            lib.listToAttrs (
-              map (seed: lib.nameValuePair "${id}-s${toString seed}" (gym.run id seed)) fixedSeeds
-            )
-            // { ${id} = gym.run id 1; }
-          ) gym.challengeFiles;
-        in
-        perSeed // { gym = pkgs.callPackage ./gym { }; default = pkgs.callPackage ./gym { }; }
+        let gym = gymFor system pkgs;
+        in lib.mapAttrs (id: _: gym.run id seed) gym.challengeFiles
+          // { gym = pkgs.callPackage ./gym { }; default = pkgs.callPackage ./gym { }; }
       );
 
-      # Every fixed seed of every challenge: unsolved -> check fails, solution -> check passes.
+      # Self-tests: unsolved -> check fails, wrong solutions fail, solution passes.
       checks = forAllSystems (
         system: pkgs:
         let gym = gymFor system pkgs;
         in lib.concatMapAttrs (
           id: _:
-          lib.listToAttrs (
-            map (seed: lib.nameValuePair "${id}-s${toString seed}" (gym.selfTest id seed)) fixedSeeds
-          )
+          lib.listToAttrs (map (s: lib.nameValuePair
+            (if s == defaultSeed then id else "${id}-seed-${toString s}")
+            (gym.selfTest id s)) testSeeds)
         ) gym.challengeFiles
       );
 

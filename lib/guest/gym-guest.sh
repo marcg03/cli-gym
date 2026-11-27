@@ -4,7 +4,8 @@ set -uo pipefail
 dir=/etc/cligym
 
 cmd_task() {
-  jq -r '"\(.title) [\(.id), seed \(.seed), \(.difficulty)]"' "$dir/meta.json"
+  jq -r '"\(.title) [\(.id), \(.difficulty)]"' "$dir/meta.json"
+  jq -r '"Seed \(.seed). Another world: GYM_SEED=<n> nix run --impure .#\(.id)"' "$dir/meta.json"
   echo
   cat "$dir/task.md"
   echo

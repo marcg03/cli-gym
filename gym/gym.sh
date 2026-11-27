@@ -1,17 +1,10 @@
-# gym list                      show challenges
-# gym start <id> [seed]         boot a challenge VM (seed defaults to 1)
-# Env: CLIGYM_FLAKE (default: the git repo you're in), CLIGYM_KVM=0 to force emulation.
-
+# Host-side gym: list challenges and boot one.
 flake=${CLIGYM_FLAKE:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}
-system=$(nix eval --impure --raw --expr builtins.currentSystem)
-
-kvm=true
-if [ "${CLIGYM_KVM:-}" = 0 ] || [ ! -w /dev/kvm ]; then kvm=false; fi
 
 usage() {
   cat >&2 <<'USAGE'
 gym list                  show challenges
-gym start <id> [seed]     boot a challenge VM (seed defaults to 1)
+gym start <id> [seed]     boot a challenge VM (default seed unless one is given)
 USAGE
   exit 2
 }
@@ -23,18 +16,12 @@ cmd_list() {
 }
 
 cmd_start() {
-  local id=${1:?usage: gym start <id> [seed]} seed=${2:-1}
-  [[ $seed =~ ^[0-9]+$ ]] || { echo "seed must be a number" >&2; exit 2; }
-  echo "Booting $id, seed $seed$([ "$kvm" = false ] && echo ' (no KVM: emulated, slow)'). Leave with 'poweroff'."
-  if [ "$kvm" = true ] && nix eval --json "$flake#lib.fixedSeeds" | jq -e "index($seed)" > /dev/null; then
-    # Pure, cacheable flake output.
-    exec nix run "$flake#$id-s$seed"
+  local id=${1:?usage: gym start <id> [seed]}
+  if [ -n "${2:-}" ]; then
+    [[ $2 =~ ^[0-9]+$ ]] || { echo "seed must be a number" >&2; exit 2; }
+    GYM_SEED=$2 exec nix run --impure "$flake#$id"
   fi
-  # Free-form seed (or no KVM): build from the same function via --expr.
-  local ref="path:$flake"
-  [ -d "$flake/.git" ] && ref="git+file://$flake"
-  exec nix run --impure --expr "
-    (builtins.getFlake \"$ref\").lib.$system.runWith { id = \"$id\"; seed = $seed; kvm = $kvm; }"
+  exec nix run "$flake#$id"
 }
 
 case "${1:-}" in

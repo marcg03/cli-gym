@@ -6,11 +6,14 @@ from Nix code and a seed. You solve it inside the VM and `gym check` verifies it
 ## Try it
 
 ```sh
-nix run .#sed-fix-config        # seed 1
-nix run .#sed-fix-config-s3     # seeds 1-5 are plain flake outputs
+nix run .#sed-fix-config                            # the default world (seed 0)
+GYM_SEED=42 nix run --impure .#sed-fix-config       # another world
 nix develop -c gym list
-nix develop -c gym start sed-fix-config 4242   # any seed (uses --impure --expr)
+nix develop -c gym start sed-fix-config 42          # same as the GYM_SEED line
 ```
+
+Without `--impure`, `GYM_SEED` is ignored and you get the default seed. The VM prints the
+seed it was built with when you log in, so you can always tell.
 
 Inside the VM (you're logged in as root in /root):
 
@@ -49,7 +52,7 @@ values are filled into it with `{{name}}` placeholders. The verifier runs `check
 either a `command` (exit code and optional stdout) or a `file` (sha256), and
 the first failure prints its `feedback`.
 
-`nix flake check` boots every fixed seed in the NixOS test driver. There it asserts
+`nix flake check` boots the default seed and two extra seeds in the NixOS test driver. There it asserts
 that `gym check` fails on the untouched world and passes after `solution`.
 
 ## `gym check` output
