@@ -1,15 +1,14 @@
 # In-VM `gym` command: task, check, answer.
+# Output is plain text and owned by this runner, so every challenge reports the same way.
 set -uo pipefail
 dir=/etc/cligym
 
-bold=$'\e[1m'; green=$'\e[32m'; red=$'\e[31m'; dim=$'\e[2m'; reset=$'\e[0m'
-
 cmd_task() {
-  echo "${bold}$(jq -r '"\(.title)  [\(.id) · seed \(.seed) · \(.difficulty)]"' "$dir/meta.json")${reset}"
+  jq -r '"\(.title) [\(.id), seed \(.seed), \(.difficulty)]"' "$dir/meta.json"
   echo
   cat "$dir/task.md"
   echo
-  echo "${dim}Commands: gym task · gym check · gym answer · poweroff to leave${reset}"
+  echo "Commands: gym task | gym check | gym answer | poweroff to leave"
 }
 
 cmd_answer() {
@@ -22,55 +21,61 @@ cmd_answer() {
 }
 
 sha() { sha256sum | cut -d' ' -f1; }
+field() { jq -r "$1 // empty" <<<"$probe"; }
+# Collapse output to one line for the report.
+oneline() { printf '%s' "$1" | head -c 200 | tr '\n' '|'; }
 
-# Runs probe $1 (JSON). Returns 0 on pass.
+# Runs $probe. On failure sets $what, $expected and $got and returns 1.
 run_probe() {
-  local p=$1 type path expected out rc
-  type=$(jq -r .type <<<"$p")
+  local type path want out rc
+  type=$(field .type)
   case $type in
     file)
-      path=$(jq -r .path <<<"$p"); [[ $path == /* ]] || path=/root/$path
-      expected=$(jq -r '.sha256 // empty' <<<"$p")
-      [ -z "$expected" ] && expected=$(cat "$(jq -r .sha256File <<<"$p")")
-      [ -f "$path" ] && [ "$(sha < "$path")" = "$expected" ]
+      path=$(field .path); [[ $path == /* ]] || path=/root/$path
+      want=$(field .sha256); [ -z "$want" ] && want=$(cat "$(field .sha256File)")
+      what="file $path"
+      expected="sha256 $want"
+      if [ ! -f "$path" ]; then got="file does not exist"; return 1; fi
+      got="sha256 $(sha < "$path")"
+      [ "$got" = "$expected" ]
       ;;
     command)
-      out=$(cd /root && bash -c "$(jq -r .run <<<"$p")" 2>/dev/null); rc=$?
-      [ "$rc" -eq "$(jq -r .exitCode <<<"$p")" ] || return 1
-      if [ "$(jq -r '.stdout != null' <<<"$p")" = true ]; then
-        [ "$out" = "$(jq -r .stdout <<<"$p")" ] || return 1
+      what="command: $(field .run)"
+      out=$(cd /root && bash -c "$(field .run)" 2>/dev/null); rc=$?
+      expected="exit $(field .exitCode)"
+      got="exit $rc"
+      if [ "$(jq -r '.stdout != null' <<<"$probe")" = true ]; then
+        expected+=", output \"$(field .stdout)\""
+        got+=", output \"$(oneline "$out")\""
       fi
-      if [ "$(jq -r '.sha256 != null' <<<"$p")" = true ]; then
-        [ "$(printf '%s\n' "$out" | sha)" = "$(jq -r .sha256 <<<"$p")" ] || return 1
-      fi
+      [ "$got" = "$expected" ]
       ;;
-    *) echo "unknown probe type $type" >&2; return 2 ;;
+    *) what="unknown probe type '$type'"; expected="file or command"; got="$type"; return 1 ;;
   esac
 }
 
 cmd_check() {
-  local n i p desc fb
+  local n i desc note
   n=$(jq length "$dir/checks.json")
   for ((i = 0; i < n; i++)); do
-    p=$(jq -c ".[$i]" "$dir/checks.json")
-    desc=$(jq -r .description <<<"$p")
-    if run_probe "$p"; then
-      echo "${green}✓${reset} $desc"
-    else
-      echo "${red}✗${reset} $desc"
-      fb=$(jq -r '.feedback // empty' <<<"$p")
-      [ -n "$fb" ] && echo "  ${dim}$fb${reset}"
-      for ((i = i + 1; i < n; i++)); do echo "${dim}· $(jq -r ".[$i].description" "$dir/checks.json")${reset}"; done
+    probe=$(jq -c ".[$i]" "$dir/checks.json")
+    desc=$(field .description)
+    if ! run_probe; then
+      echo "FAIL check $((i + 1))/$n: $desc"
+      echo "  $what"
+      echo "  expected: $expected"
+      echo "  got:      $got"
+      note=$(field .feedback)
+      [ -n "$note" ] && echo "  note:     $note"
       return 1
     fi
   done
-  echo
-  echo "${bold}${green}Solved!${reset} Compare with the reference: gym answer"
+  echo "PASS all $n checks"
 }
 
 case "${1:-task}" in
   task) cmd_task ;;
-  answer) shift; cmd_answer "$@" ;;
   check) cmd_check ;;
+  answer) shift; cmd_answer "$@" ;;
   *) echo "usage: gym [task|check|answer]" >&2; exit 2 ;;
 esac

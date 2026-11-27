@@ -4,8 +4,9 @@ let
   newHost = rng.pick "host" [ "db01.internal" "pg-primary.lan" "10.20.0.15" "postgres.prod" "db.shop.local" ];
   sections = rng.sample "sections" (rng.int "n-sections" 3 5) [ "auth" "billing" "search" "mailer" "cart" "inventory" "reports" ];
 
-  # Lines a section may contain. Decoys: cache_host = localhost must stay, and
-  # "db_hostname" must not be touched by a sloppy regex.
+  # Lines a section may contain. Decoys: cache_host = localhost must stay,
+  # "db_hostname" must not be touched by a sloppy regex, and already-commented
+  # debug lines must not get commented twice.
   pool = s: [
     "db_host = localhost"
     "db_port = ${toString (rng.pick "port-${s}" [ 5432 5433 6432 ])}"
@@ -17,16 +18,19 @@ let
     "enable_debug_toolbar = yes"
     "db_hostname_check = strict"
     "timeout = ${toString (rng.int "timeout-${s}" 5 120)}"
+    "# debug_profiler = on"
   ];
   sectionLines = s:
     [ "[${s}]" ] ++ [ "db_host = localhost" ]
     ++ lib.filter (l: l != "db_host = localhost") (rng.sample "lines-${s}" (rng.int "n-${s}" 4 8) (pool s))
     ++ [ "" ];
 
-  original = [ "# shopfront configuration" "" ] ++ lib.concatMap sectionLines sections;
+  # The header always has one commented line mentioning debug.
+  original = [ "# shopfront configuration" "# set log_level = debug when troubleshooting" "" ] ++ lib.concatMap sectionLines sections;
 
   fix = l:
-    if l == "db_host = localhost" then "db_host = ${newHost}"
+    if lib.hasPrefix "#" l then l
+    else if l == "db_host = localhost" then "db_host = ${newHost}"
     else if lib.hasInfix "debug" l then "# ${l}"
     else l;
 
@@ -48,7 +52,8 @@ in
     1. Every `db_host = localhost` line must become `db_host = ${newHost}`.
        Nothing else that mentions localhost may change.
     2. Disable debugging: comment out every line containing `debug` by putting
-       `# ` (hash and a space) at the start of it.
+       `# ` (hash and a space) at the start of it. Lines that are already
+       comments stay exactly as they are.
 
     Don't change any other line. Try to do it with a single `sed` command.
   '';
@@ -57,6 +62,7 @@ in
   answer = builtins.replaceStrings [ "{{host}}" ] [ newHost ] (builtins.readFile ./README.md);
 
   checks = [
+    # (order matters: the first failing probe's feedback is shown)
     {
       type = "command";
       description = "app.conf still exists";
@@ -77,6 +83,14 @@ in
       stdout = "0";
     }
     {
+      type = "command";
+      description = "Existing comments weren't commented again";
+      run = "grep -c '^# #' app.conf";
+      exitCode = 1;
+      stdout = "0";
+      feedback = "Some lines now start with '# #'. The header was already a comment. Skip lines starting with # (hint: an address with !).";
+    }
+    {
       type = "file";
       description = "Nothing else changed";
       path = "app.conf";
@@ -86,6 +100,15 @@ in
   ];
 
   solution = ''
-    sed -i -e 's/^db_host = localhost$/db_host = ${newHost}/' -e '/debug/s/^/# /' app.conf
+    sed -i -e 's/^db_host = localhost$/db_host = ${newHost}/' -e '/^#/!s/.*debug.*/# &/' app.conf
   '';
+
+  # Plausible fixes that must NOT pass (self-tests assert they fail).
+  wrongSolutions = [
+    # Comments everything with debug, including lines that already are comments.
+    ''
+      sed -i -E 's/(.*debug.*)/# \1/g' app.conf
+      sed -i -E 's/db_host = localhost/db_host = ${newHost}/g' app.conf
+    ''
+  ];
 }

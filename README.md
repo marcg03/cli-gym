@@ -51,3 +51,23 @@ the first failure prints its `feedback`.
 
 `nix flake check` boots every fixed seed in the NixOS test driver. There it asserts
 that `gym check` fails on the untouched world and passes after `solution`.
+
+## `gym check` output
+
+The runner owns the format, so every challenge reports the same way. Challenge
+authors only declare `checks`. Checks run in order and stop at the first failure:
+
+```
+PASS all 5 checks
+```
+
+```
+FAIL check 4/5: Existing comments weren't commented again
+  command: grep -c '^# #' app.conf
+  expected: exit 1, output "0"
+  got:      exit 0, output "1"
+  note:     Some lines now start with '# #'. ...
+```
+
+`note` is the check's optional `feedback`. The exit status is 0 on pass and 1 on fail.
+

@@ -46,6 +46,11 @@ in
       description = "NixOS module for the guest: services, faults, packages.";
     };
     checks = mkOption { type = types.listOf probe; description = "Probes run in order by `gym check`."; };
+    wrongSolutions = mkOption {
+      type = types.listOf types.lines;
+      default = [ ];
+      description = "Tempting but wrong fixes. Self-tests assert each one fails `gym check`.";
+    };
     solution = mkOption { type = types.lines; description = "Reference solution (shell, run as root in /root). Used by self-tests."; };
   };
 }
