@@ -1,71 +1,49 @@
 # cli-gym
 
-A LeetCode for the Linux command line. Each challenge is a NixOS microVM built
-from Nix code and a seed. You solve it inside the VM and `gym check` verifies it.
+A LeetCode for the Linux command line. Each challenge is a small NixOS microVM.
+You solve it inside the VM and `gym check` tells you whether you got it.
 
-## Try it
+## Play
 
 ```sh
-nix run .#sed-fix-config                            # the default world (seed 0)
-GYM_SEED=42 nix run --impure .#sed-fix-config       # another world
-nix develop -c gym list
-nix develop -c gym start sed-fix-config 42          # same as the GYM_SEED line
+nix run .#sed-fix-config
 ```
 
-Without `--impure`, `GYM_SEED` is ignored and you get the default seed. The VM prints the
-seed it was built with when you log in, so you can always tell.
-
-Inside the VM (you're logged in as root in /root):
+You're logged in as root in `/root`:
 
 ```
 gym task     # show the task again
+gym check    # run the challenge's check
 gym answer   # flip the card: the explained solution
-gym check    # run the verifier
 poweroff     # leave
 ```
 
-Needs Linux with KVM (`/dev/kvm`). Check with `ls -l /dev/kvm`. If it's missing, enable
-VT-x/AMD-V in the firmware and load `kvm-intel`/`kvm-amd` (NixOS: `boot.kernelModules`).
-Without KVM, `gym start` falls back to emulation (slow), and `nix flake check` will time out:
-NixOS advertises the `kvm` system feature even when `/dev/kvm` is absent.
+Needs Linux with KVM (`ls -l /dev/kvm`). Without it the VM runs emulated and is very slow.
 
-## Layout
+## Write a challenge
 
+Make a folder `challenges/<id>/`. It's picked up automatically. Its `default.nix` is a
+plain attribute set:
+
+```nix
+{
+  title = "Moving day for the database";
+  difficulty = "easy";
+  task = ./task.md;          # front of the card
+  answer = ./README.md;      # back of the card
+  check = ./check.sh;        # any executable: exit 0 = solved
+  solution = ./solution.sh;  # reference solution, used by nix flake check
+  files = [ ./app.conf ];    # optional: copied into /root at boot
+  # machine = { ... };       # optional: extra NixOS config (services, users, packages)
+}
 ```
-flake.nix
-lib/options.nix          challenge schema (meta, task, answer, check, solution, files, machine)
-lib/rand.nix             pure seeded PRNG: rng.int / pick / sample / shuffle
-lib/default.nix          evalChallenge, microVM runner, self-test
-lib/guest/base.nix       guest NixOS module (autologin, files, in-VM gym)
-lib/guest/gym-guest.sh   in-VM gym: task, check (runs the challenge check), answer
-lib/guest/microvm.nix    qemu microVM, 512 MiB, no network, host store via 9p
-challenges/<id>/default.nix
-gym/                     host CLI
-```
 
-## Writing a challenge
+### The check contract
 
-Make a folder `challenges/<id>/` with a `default.nix`. It is picked up automatically.
-The module receives `{ seed, rng, pkgs, lib, ... }` and sets:
-
-| field      | required | what it is |
-|------------|----------|------------|
-| `meta.title` (+ `difficulty`, `tags`, `minutes`) | title only | shown by `gym list` and `gym task` |
-| `task`     | yes | markdown, the front of the card |
-| `answer`   | yes | markdown, the back of the card (`gym answer`). Can be read from a README.md |
-| `check`    | yes | any executable: shell, Python, C++, ... e.g. `pkgs.writeShellScript` |
-| `solution` | yes | reference solution (shell), used by the self-tests |
-| `files`    | no  | files copied into `/root` at boot, e.g. `{ "app.conf" = pkgs.writeText ...; }` |
-| `machine`  | no  | extra NixOS config for the VM: services, users, packages, broken things |
-
-See `challenges/sed-fix-config/`. Use `rng.int`, `rng.pick`, `rng.sample` and `rng.shuffle`
-for anything seeded, and interpolate the values into `task`, `check` and `solution`.
-
-## The check contract
-
-`gym check` runs your `check` as root in `/root`. **Exit 0 means solved**, and anything
-else means not yet. The check prints its own feedback, and the runner only adds a final
-`PASS` or `FAIL (check exited N)` line. A good check says what it expected and what it got:
+`gym check` runs `check` as root in `/root`, with `$CHALLENGE` pointing at the
+challenge folder (e.g. for an `expected.conf`). **Exit 0 means solved.** The check
+prints its own feedback, and the runner only adds `PASS` or `FAIL (check exited N)`.
+Say what you expected and what you got:
 
 ```
 failed: existing comments should stay as they are
@@ -75,5 +53,16 @@ failed: existing comments should stay as they are
 FAIL (check exited 1)
 ```
 
-`nix flake check` boots the default seed and two extra seeds in the NixOS test driver.
-There it asserts that the check fails on the untouched world and passes after `solution`.
+### Self-test
+
+`nix flake check` boots each challenge in the NixOS test driver. It asserts that the check
+fails on the untouched files and passes after `solution`.
+
+## Layout
+
+```
+flake.nix          outputs: packages.<id> (the VM), checks.<id> (the self-test)
+lib/default.nix    challenge loader, guest config, microVM, self-test
+lib/gym.sh         the in-VM gym command
+challenges/<id>/   one folder per challenge
+```

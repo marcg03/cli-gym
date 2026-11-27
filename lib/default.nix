@@ -1,59 +1,85 @@
-{ lib, pkgs, system, nixpkgs, microvm, challengeDir }:
+# A challenge is a folder challenges/<id>/ whose default.nix returns:
+#   { title, task, answer, check, solution, files ? [ ], machine ? { } }
+# task/answer are markdown files, check is an executable (exit 0 = solved),
+# solution is a shell script, files are copied into /root, machine is extra NixOS config.
+{ lib, pkgs, nixpkgs, microvm, challengeDir }:
 let
-  # challenges/<id>/default.nix
-  challengeFiles = lib.mapAttrs (name: _: challengeDir + "/${name}/default.nix")
-    (lib.filterAttrs (_: t: t == "directory") (builtins.readDir challengeDir));
+  ids = lib.attrNames (lib.filterAttrs (_: t: t == "directory") (builtins.readDir challengeDir));
+  load = id: import (challengeDir + "/${id}");
 
-  # Evaluate a challenge module for one seed.
-  evalChallenge = id: seed:
-    (lib.evalModules {
-      modules = [ ./options.nix challengeFiles.${id} ];
-      specialArgs = {
-        inherit seed pkgs;
-        rng = import ./rand.nix { inherit lib; } id seed;
-      };
-    }).config;
+  # NixOS config shared by the playable microVM and the self-test VM.
+  guest = id:
+    let c = load id;
+    in {
+      imports = [ (c.machine or { }) ];
+      networking.hostName = "gym";
+      system.stateVersion = "25.11";
+      documentation.enable = false;
+      nix.enable = false;
 
-  guestBase = id: seed: import ./guest/base.nix { inherit id seed; challenge = evalChallenge id seed; };
+      services.getty.autologinUser = "root";
+      programs.bash.loginShellInit = "cd /root; gym task";
 
-  nixos = { id, seed, kvm ? true }:
-    nixpkgs.lib.nixosSystem {
-      inherit system;
-      modules = [
-        microvm.nixosModules.microvm
-        (guestBase id seed)
-        (import ./guest/microvm.nix { inherit kvm; })
+      environment.systemPackages = with pkgs; [
+        (writeShellApplication {
+          name = "gym";
+          runtimeInputs = [ coreutils ];
+          checkPhase = "";
+          text = ''
+            TITLE=${lib.escapeShellArg c.title}
+            TASK=${c.task} ANSWER=${c.answer} CHECK=${c.check} CHALLENGE=${challengeDir + "/${id}"}
+          '' + builtins.readFile ./gym.sh;
+        })
+        coreutils gnused gnugrep gawk findutils diffutils less vim nano
       ];
-    };
 
-  # The thing you `nix run`: boots the challenge VM with its console on your terminal.
-  run = id: seed:
-    let vm = (nixos { inherit id seed; }).config.microvm.declaredRunner;
-    in vm // { meta = (vm.meta or { }) // { mainProgram = "microvm-run"; }; };
-
-  # Self-test: unsolved world must fail `gym check`, reference solution must pass it.
-  selfTest = id: seed:
-    let c = evalChallenge id seed;
-    in pkgs.testers.runNixOSTest {
-      name = "${id}-s${toString seed}";
-      nodes.machine = {
-        imports = [ (guestBase id seed) ];
-        virtualisation.memorySize = 512;
+      # Fresh copy of the starting files on every boot (/ is a tmpfs in the microVM).
+      systemd.services.gym-setup = {
+        wantedBy = [ "multi-user.target" ];
+        before = [ "getty.target" ];
+        serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
+        script = lib.concatMapStrings (f: ''
+          cp --no-preserve=mode ${f} /root/${baseNameOf f}
+        '') (c.files or [ ]);
       };
-      testScript = ''
-        machine.wait_for_unit("multi-user.target")
-        machine.wait_for_unit("cligym-setup.service")
-        print(machine.fail("gym check"))
-        machine.succeed("cd /root && bash ${pkgs.writeText "solution.sh" c.solution}")
-        print(machine.succeed("gym check"))
-        machine.succeed("test -n \"$(gym answer -y)\"")
-      '';
     };
 
-  catalog = lib.mapAttrs (id: _:
-    let c = evalChallenge id 0;
-    in c.meta) challengeFiles;
+  # `nix run .#<id>`: boots the challenge in a qemu microVM on your terminal.
+  vm = id:
+    let
+      runner = (nixpkgs.lib.nixosSystem {
+        system = pkgs.stdenv.hostPlatform.system;
+        modules = [
+          microvm.nixosModules.microvm
+          (guest id)
+          {
+            microvm = {
+              hypervisor = "qemu";
+              mem = 512;
+              vcpu = 1;
+              interfaces = [ ];
+              socket = null;
+              shares = [{ proto = "9p"; tag = "ro-store"; source = "/nix/store"; mountPoint = "/nix/.ro-store"; }];
+            };
+          }
+        ];
+      }).config.microvm.declaredRunner;
+    in runner // { meta = (runner.meta or { }) // { mainProgram = "microvm-run"; }; };
+
+  # `nix flake check`: the untouched world fails the check, the solution passes it.
+  test = id: pkgs.testers.runNixOSTest {
+    name = id;
+    nodes.machine.imports = [ (guest id) ];
+    testScript = ''
+      machine.wait_for_unit("gym-setup.service")
+      print(machine.fail("gym check"))
+      machine.succeed("cd /root && bash ${(load id).solution}")
+      print(machine.succeed("gym check"))
+    '';
+  };
 in
 {
-  inherit challengeFiles evalChallenge nixos run selfTest catalog;
+  vms = lib.genAttrs ids vm;
+  tests = lib.genAttrs ids test;
+  shell = pkgs.mkShell { packages = [ pkgs.bashInteractive ]; };
 }

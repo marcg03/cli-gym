@@ -1,14 +1,14 @@
 # Answer: moving day for the database
 
 ```sh
-sed -i -e 's/^db_host = localhost$/db_host = {{host}}/' -e '/^#/!s/.*debug.*/# &/' app.conf
+sed -i -e 's/^db_host = localhost$/db_host = db01.internal/' -e '/^#/!s/.*debug.*/# &/' app.conf
 ```
 
 **Why it works**
 
 - `-i` edits `app.conf` in place. Leave it off to preview the result on stdout first.
 - `-e` adds an expression. Several `-e`s run in order on every line.
-- `s/^db_host = localhost$/db_host = {{host}}/` substitutes on lines matching
+- `s/^db_host = localhost$/db_host = db01.internal/` substitutes on lines matching
   exactly `db_host = localhost`. `^` and `$` anchor the start and end of the line, so
   `cache_host = localhost` and `db_hostname_check = strict` are left alone.
 - `/^#/!s/.*debug.*/# &/` combines an **address** and a command:
