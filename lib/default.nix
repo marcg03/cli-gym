@@ -47,6 +47,7 @@ let
         machine.fail("gym check")
         machine.succeed("cd /root && bash ${pkgs.writeText "solution.sh" c.solution}")
         print(machine.succeed("gym check"))
+        machine.succeed("gym answer -y | grep -q sed")
       '';
     };
 

@@ -31,7 +31,10 @@ in
       minutes = mkOption { type = types.int; default = 10; description = "Rough time estimate."; };
     };
     task = mkOption { type = types.lines; description = "Markdown shown to the player. Can use seeded values."; };
-    hints = mkOption { type = types.listOf types.str; default = [ ]; };
+    answer = mkOption {
+      type = types.lines;
+      description = "The back of the card: a short markdown README explaining the solution. Shown by `gym answer`.";
+    };
     files = mkOption {
       type = types.attrsOf types.path;
       default = { };

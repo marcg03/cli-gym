@@ -31,7 +31,7 @@ in
 
       environment.etc = {
         "cligym/task.md".text = c.task;
-        "cligym/hints.json".text = builtins.toJSON c.hints;
+        "cligym/answer.md".text = c.answer;
         "cligym/checks.json".text = builtins.toJSON probes;
         "cligym/meta.json".text = builtins.toJSON (c.meta // { inherit id seed; });
       };

@@ -53,12 +53,8 @@ in
     Don't change any other line. Try to do it with a single `sed` command.
   '';
 
-  hints = [
-    "`sed -i` edits a file in place. Try your expression without -i first to preview."
-    "Anchor your match with ^ and $ so `cache_host` and `db_hostname_check` survive."
-    "An address limits a command to matching lines: `/debug/s/^/# /`."
-    "You can chain expressions: `sed -i -e '...' -e '...' app.conf`."
-  ];
+  # The back of the card, with the seeded host filled in.
+  answer = builtins.replaceStrings [ "{{host}}" ] [ newHost ] (builtins.readFile ./README.md);
 
   checks = [
     {

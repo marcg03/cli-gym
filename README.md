@@ -16,7 +16,7 @@ Inside the VM (you're logged in as root in /root):
 
 ```
 gym task     # show the task again
-gym hint     # next hint
+gym answer   # flip the card: the explained solution
 gym check    # run the verifier
 poweroff     # leave
 ```
@@ -30,11 +30,11 @@ NixOS advertises the `kvm` system feature even when `/dev/kvm` is absent.
 
 ```
 flake.nix
-lib/options.nix          challenge schema (meta, task, hints, files, machine, checks, solution)
+lib/options.nix          challenge schema (meta, task, answer, files, machine, checks, solution)
 lib/rand.nix             pure seeded PRNG: rng.int / pick / sample / shuffle
 lib/default.nix          evalChallenge, microVM runner, self-test
 lib/guest/base.nix       guest NixOS module (autologin, files, in-VM gym)
-lib/guest/gym-guest.sh   in-VM gym: task, hint, check (the verifier)
+lib/guest/gym-guest.sh   in-VM gym: task, check (the verifier), answer
 lib/guest/microvm.nix    qemu microVM, 512 MiB, no network, host store via 9p
 challenges/<id>/default.nix
 gym/                     host CLI
@@ -43,7 +43,9 @@ gym/                     host CLI
 ## Writing a challenge
 
 A challenge is a module receiving `{ seed, rng, pkgs, lib, ... }`. See
-`challenges/sed-fix-config/default.nix`. The verifier runs `checks` in order. Each probe is
+`challenges/sed-fix-config/`. Like an Anki card, the front is `task` and the back is
+`answer`: a README.md in the challenge directory that explains the solution. Seeded
+values are filled into it with `{{name}}` placeholders. The verifier runs `checks` in order. Each probe is
 either a `command` (exit code and optional stdout) or a `file` (sha256), and
 the first failure prints its `feedback`.
 

@@ -1,8 +1,6 @@
-# In-VM `gym` command: task, hint, check.
+# In-VM `gym` command: task, check, answer.
 set -uo pipefail
 dir=/etc/cligym
-state=/run/cligym
-mkdir -p "$state"
 
 bold=$'\e[1m'; green=$'\e[32m'; red=$'\e[31m'; dim=$'\e[2m'; reset=$'\e[0m'
 
@@ -11,17 +9,16 @@ cmd_task() {
   echo
   cat "$dir/task.md"
   echo
-  echo "${dim}Commands: gym task · gym hint · gym check · poweroff to leave${reset}"
+  echo "${dim}Commands: gym task · gym check · gym answer · poweroff to leave${reset}"
 }
 
-cmd_hint() {
-  local n total
-  n=$(cat "$state/hints" 2>/dev/null || echo 0)
-  total=$(jq length "$dir/hints.json")
-  if [ "$total" -eq 0 ]; then echo "No hints for this one."; return; fi
-  if [ "$n" -ge "$total" ]; then n=$((total - 1)); fi
-  echo "Hint $((n + 1))/$total: $(jq -r ".[$n]" "$dir/hints.json")"
-  echo $((n + 1)) > "$state/hints"
+cmd_answer() {
+  if [ "${1:-}" != -y ]; then
+    read -rp "Reveal the answer? [y/N] " yn
+    [[ $yn == [yY]* ]] || return 0
+  fi
+  echo
+  cat "$dir/answer.md"
 }
 
 sha() { sha256sum | cut -d' ' -f1; }
@@ -68,12 +65,12 @@ cmd_check() {
     fi
   done
   echo
-  echo "${bold}${green}Solved!${reset} (hints used: $(cat "$state/hints" 2>/dev/null || echo 0))"
+  echo "${bold}${green}Solved!${reset} Compare with the reference: gym answer"
 }
 
 case "${1:-task}" in
   task) cmd_task ;;
-  hint) cmd_hint ;;
+  answer) shift; cmd_answer "$@" ;;
   check) cmd_check ;;
-  *) echo "usage: gym [task|hint|check]" >&2; exit 2 ;;
+  *) echo "usage: gym [task|check|answer]" >&2; exit 2 ;;
 esac
