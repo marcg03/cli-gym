@@ -21,7 +21,10 @@ gym check    # run the verifier
 poweroff     # leave
 ```
 
-Needs Linux with KVM (`/dev/kvm`). Without it, `gym start` falls back to emulation (slow).
+Needs Linux with KVM (`/dev/kvm`). Check with `ls -l /dev/kvm`. If it's missing, enable
+VT-x/AMD-V in the firmware and load `kvm-intel`/`kvm-amd` (NixOS: `boot.kernelModules`).
+Without KVM, `gym start` falls back to emulation (slow), and `nix flake check` will time out:
+NixOS advertises the `kvm` system feature even when `/dev/kvm` is absent.
 
 ## Layout
 
