@@ -28,8 +28,13 @@
       };
     in
     {
-      # lib.<system>.run "<id>" <seed>   -> microVM runner (used by `gym start` for free-form seeds)
-      lib = forAllSystems (system: pkgs: gymFor system pkgs);
+      # lib.<system>.runWith { id; seed; kvm; } -> microVM runner (used by `gym start` for free-form seeds)
+      # lib.catalog / lib.fixedSeeds          -> metadata for `gym list` / `gym start`
+      lib = forAllSystems (system: pkgs: gymFor system pkgs) // {
+        # Metadata for `gym list` (evaluated at seed 1).
+        catalog = (gymFor "x86_64-linux" nixpkgs.legacyPackages.x86_64-linux).catalog;
+        inherit fixedSeeds;
+      };
 
       packages = forAllSystems (
         system: pkgs:
@@ -57,10 +62,6 @@
           )
         ) gym.challengeFiles
       );
-
-      # Metadata for `gym list` (evaluated at seed 1).
-      catalog = (gymFor "x86_64-linux" nixpkgs.legacyPackages.x86_64-linux).catalog;
-      inherit fixedSeeds;
 
       devShells = forAllSystems (system: pkgs: {
         default = pkgs.mkShell {

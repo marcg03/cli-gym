@@ -17,7 +17,7 @@ USAGE
 }
 
 cmd_list() {
-  nix eval --json "$flake#catalog" | jq -r '
+  nix eval --json "$flake#lib.catalog" | jq -r '
     to_entries[] | [.key, .value.difficulty, "\(.value.minutes)m", (.value.tags | join(",")), .value.title] | @tsv' \
   | column -t -s $'\t' -N ID,LEVEL,TIME,TAGS,TITLE
 }
@@ -26,7 +26,7 @@ cmd_start() {
   local id=${1:?usage: gym start <id> [seed]} seed=${2:-1}
   [[ $seed =~ ^[0-9]+$ ]] || { echo "seed must be a number" >&2; exit 2; }
   echo "Booting $id, seed $seed$([ "$kvm" = false ] && echo ' (no KVM: emulated, slow)'). Leave with 'poweroff'."
-  if [ "$kvm" = true ] && nix eval --json "$flake#fixedSeeds" | jq -e "index($seed)" > /dev/null; then
+  if [ "$kvm" = true ] && nix eval --json "$flake#lib.fixedSeeds" | jq -e "index($seed)" > /dev/null; then
     # Pure, cacheable flake output.
     exec nix run "$flake#$id-s$seed"
   fi
