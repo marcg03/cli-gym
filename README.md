@@ -33,11 +33,11 @@ NixOS advertises the `kvm` system feature even when `/dev/kvm` is absent.
 
 ```
 flake.nix
-lib/options.nix          challenge schema (meta, task, answer, files, machine, checks, solution)
+lib/options.nix          challenge schema (meta, task, answer, check, solution, files, machine)
 lib/rand.nix             pure seeded PRNG: rng.int / pick / sample / shuffle
 lib/default.nix          evalChallenge, microVM runner, self-test
 lib/guest/base.nix       guest NixOS module (autologin, files, in-VM gym)
-lib/guest/gym-guest.sh   in-VM gym: task, check (the verifier), answer
+lib/guest/gym-guest.sh   in-VM gym: task, check (runs the challenge check), answer
 lib/guest/microvm.nix    qemu microVM, 512 MiB, no network, host store via 9p
 challenges/<id>/default.nix
 gym/                     host CLI
@@ -45,32 +45,35 @@ gym/                     host CLI
 
 ## Writing a challenge
 
-A challenge is a module receiving `{ seed, rng, pkgs, lib, ... }`. See
-`challenges/sed-fix-config/`. Like an Anki card, the front is `task` and the back is
-`answer`: a README.md in the challenge directory that explains the solution. Seeded
-values are filled into it with `{{name}}` placeholders. The verifier runs `checks` in order. Each probe is
-either a `command` (exit code and optional stdout) or a `file` (sha256), and
-the first failure prints its `feedback`.
+Make a folder `challenges/<id>/` with a `default.nix`. It is picked up automatically.
+The module receives `{ seed, rng, pkgs, lib, ... }` and sets:
 
-`nix flake check` boots the default seed and two extra seeds in the NixOS test driver. There it asserts
-that `gym check` fails on the untouched world and passes after `solution`.
+| field      | required | what it is |
+|------------|----------|------------|
+| `meta.title` (+ `difficulty`, `tags`, `minutes`) | title only | shown by `gym list` and `gym task` |
+| `task`     | yes | markdown, the front of the card |
+| `answer`   | yes | markdown, the back of the card (`gym answer`). Can be read from a README.md |
+| `check`    | yes | any executable: shell, Python, C++, ... e.g. `pkgs.writeShellScript` |
+| `solution` | yes | reference solution (shell), used by the self-tests |
+| `files`    | no  | files copied into `/root` at boot, e.g. `{ "app.conf" = pkgs.writeText ...; }` |
+| `machine`  | no  | extra NixOS config for the VM: services, users, packages, broken things |
 
-## `gym check` output
+See `challenges/sed-fix-config/`. Use `rng.int`, `rng.pick`, `rng.sample` and `rng.shuffle`
+for anything seeded, and interpolate the values into `task`, `check` and `solution`.
 
-The runner owns the format, so every challenge reports the same way. Challenge
-authors only declare `checks`. Checks run in order and stop at the first failure:
+## The check contract
+
+`gym check` runs your `check` as root in `/root`. **Exit 0 means solved**, and anything
+else means not yet. The check prints its own feedback, and the runner only adds a final
+`PASS` or `FAIL (check exited N)` line. A good check says what it expected and what it got:
 
 ```
-PASS all 5 checks
+failed: existing comments should stay as they are
+  expected: 0 lines starting with '# #'
+  got:      3 (the header was already a comment)
+
+FAIL (check exited 1)
 ```
 
-```
-FAIL check 4/5: Existing comments weren't commented again
-  command: grep -c '^# #' app.conf
-  expected: exit 1, output "0"
-  got:      exit 0, output "1"
-  note:     Some lines now start with '# #'. ...
-```
-
-`note` is the check's optional `feedback`. The exit status is 0 on pass and 1 on fail.
-
+`nix flake check` boots the default seed and two extra seeds in the NixOS test driver.
+There it asserts that the check fails on the untouched world and passes after `solution`.

@@ -8,9 +8,8 @@ let
     name = "gym";
     runtimeInputs = with pkgs; [ jq coreutils ];
     text = builtins.readFile ./gym-guest.sh;
-    checkPhase = ""; # the script is bash-only on purpose; skip shellcheck strictness on probe snippets
+    checkPhase = "";
   };
-  probes = map (lib.filterAttrs (_: v: v != null)) c.checks;
 in
 {
   imports = [ c.machine ];
@@ -32,7 +31,7 @@ in
       environment.etc = {
         "cligym/task.md".text = c.task;
         "cligym/answer.md".text = c.answer;
-        "cligym/checks.json".text = builtins.toJSON probes;
+        "cligym/check".source = c.check;
         "cligym/meta.json".text = builtins.toJSON (c.meta // { inherit id seed; });
       };
 

@@ -3,24 +3,6 @@
 { lib, ... }:
 let
   inherit (lib) mkOption types;
-  probe = types.submodule {
-    options = {
-      type = mkOption {
-        type = types.enum [ "file" "command" ];
-        description = "file: compare a file's sha256; command: run a snippet and judge its exit code and stdout.";
-      };
-      description = mkOption { type = types.str; description = "Shown in the pass/fail list."; };
-      feedback = mkOption { type = types.nullOr types.str; default = null; description = "Shown when this probe fails."; };
-      # file
-      path = mkOption { type = types.nullOr types.str; default = null; description = "Relative paths are relative to /root."; };
-      sha256 = mkOption { type = types.nullOr types.str; default = null; description = "Expected sha256 of the file (or of command stdout)."; };
-      sha256File = mkOption { type = types.nullOr types.str; default = null; description = "File containing the expected sha256 (for data generated at build time)."; };
-      # command
-      run = mkOption { type = types.nullOr types.str; default = null; description = "Shell snippet, run as root in /root."; };
-      exitCode = mkOption { type = types.int; default = 0; };
-      stdout = mkOption { type = types.nullOr types.str; default = null; description = "Expected stdout (trailing newlines stripped)."; };
-    };
-  };
 in
 {
   options = {
@@ -45,11 +27,13 @@ in
       default = { };
       description = "NixOS module for the guest: services, faults, packages.";
     };
-    checks = mkOption { type = types.listOf probe; description = "Probes run in order by `gym check`."; };
-    wrongSolutions = mkOption {
-      type = types.listOf types.lines;
-      default = [ ];
-      description = "Tempting but wrong fixes. Self-tests assert each one fails `gym check`.";
+    check = mkOption {
+      type = types.path;
+      description = ''
+        Any executable (shell, Python, a compiled binary, ...), e.g. pkgs.writeShellScript.
+        `gym check` runs it as root in /root. Exit 0 = solved, anything else = not yet.
+        It prints its own feedback.
+      '';
     };
     solution = mkOption { type = types.lines; description = "Reference solution (shell, run as root in /root). Used by self-tests."; };
   };

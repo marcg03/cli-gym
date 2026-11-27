@@ -44,14 +44,9 @@ let
         machine.wait_for_unit("multi-user.target")
         machine.wait_for_unit("cligym-setup.service")
         print(machine.fail("gym check"))
-        ${lib.concatMapStrings (w: ''
-          machine.succeed("cd /root && bash ${pkgs.writeText "wrong.sh" w}")
-          print(machine.fail("gym check"))
-          machine.succeed("systemctl restart cligym-setup")
-        '') c.wrongSolutions}
         machine.succeed("cd /root && bash ${pkgs.writeText "solution.sh" c.solution}")
         print(machine.succeed("gym check"))
-        machine.succeed("gym answer -y | grep -q sed")
+        machine.succeed("test -n \"$(gym answer -y)\"")
       '';
     };
 

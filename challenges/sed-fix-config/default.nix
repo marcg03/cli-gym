@@ -61,54 +61,31 @@ in
   # The back of the card, with the seeded host filled in.
   answer = builtins.replaceStrings [ "{{host}}" ] [ newHost ] (builtins.readFile ./README.md);
 
-  checks = [
-    # (order matters: the first failing probe's feedback is shown)
-    {
-      type = "command";
-      description = "app.conf still exists";
-      run = "test -f app.conf";
-    }
-    {
-      type = "command";
-      description = "db_host points at the new server";
-      run = "grep -c '^db_host = ${newHost}$' app.conf";
-      stdout = toString (builtins.length sections);
-      feedback = "Expected ${toString (builtins.length sections)} db_host lines with the new host.";
-    }
-    {
-      type = "command";
-      description = "No uncommented line mentions debug";
-      run = "grep -v '^# ' app.conf | grep -c debug";
-      exitCode = 1;
-      stdout = "0";
-    }
-    {
-      type = "command";
-      description = "Existing comments weren't commented again";
-      run = "grep -c '^# #' app.conf";
-      exitCode = 1;
-      stdout = "0";
-      feedback = "Some lines now start with '# #'. The header was already a comment. Skip lines starting with # (hint: an address with !).";
-    }
-    {
-      type = "file";
-      description = "Nothing else changed";
-      path = "app.conf";
-      sha256 = builtins.hashString "sha256" (render (map fix original));
-      feedback = "Close! Something else changed too. Compare with your preview, e.g. did cache_host or db_hostname_check change?";
-    }
-  ];
+  # Any executable works here. It runs in /root, prints its own feedback, exit 0 = solved.
+  check = pkgs.writeShellScript "check-sed-fix-config" ''
+    fail() { echo "failed: $1"; shift; for l in "$@"; do echo "  $l"; done; exit 1; }
+
+    [ -f app.conf ] || fail "app.conf is missing"
+
+    got=$(grep -c '^db_host = ${newHost}$' app.conf)
+    [ "$got" = ${toString (builtins.length sections)} ] || fail "db_host should point at the new server" \
+      "expected: ${toString (builtins.length sections)} lines 'db_host = ${newHost}'" "got:      $got"
+
+    got=$(grep -v '^#' app.conf | grep -c debug)
+    [ "$got" = 0 ] || fail "every uncommented line with debug should be commented out" \
+      "expected: 0 uncommented debug lines" "got:      $got"
+
+    got=$(grep -c '^# #' app.conf)
+    [ "$got" = 0 ] || fail "existing comments should stay as they are" \
+      "expected: 0 lines starting with '# #'" "got:      $got (the header was already a comment)"
+
+    diff -q ${pkgs.writeText "expected-app.conf" (render (map fix original))} app.conf > /dev/null \
+      || fail "nothing else should change" "hint: compare with your preview. Did cache_host or db_hostname_check change?"
+
+    echo "app.conf looks right"
+  '';
 
   solution = ''
     sed -i -e 's/^db_host = localhost$/db_host = ${newHost}/' -e '/^#/!s/.*debug.*/# &/' app.conf
   '';
-
-  # Plausible fixes that must NOT pass (self-tests assert they fail).
-  wrongSolutions = [
-    # Comments everything with debug, including lines that already are comments.
-    ''
-      sed -i -E 's/(.*debug.*)/# \1/g' app.conf
-      sed -i -E 's/db_host = localhost/db_host = ${newHost}/g' app.conf
-    ''
-  ];
 }
