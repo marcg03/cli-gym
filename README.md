@@ -9,6 +9,13 @@ You solve it inside the VM and `gym check` tells you whether you got it.
 nix run .#sed-fix-config
 ```
 
+Challenges:
+
+```
+sed-fix-config           easy    edit a config file with one sed command
+deleted-file-disk-full   medium  free a full disk held by a deleted, still open log
+```
+
 You're logged in as root in `/root`:
 
 ```
