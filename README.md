@@ -20,6 +20,7 @@ Challenges:
 ```
 sed-fix-config           easy    edit a config file with one sed command
 deleted-file-disk-full   medium  rescue a deleted, still open log and free its disk
+out-of-inodes            medium  No space left on device, but df -h shows room
 ```
 
 You are logged in as root in `/root`, and the task is shown on login:
