@@ -35,6 +35,7 @@ in
   # The faults. Both files are plain, writable copies, not links into the Nix store.
   # The old DNS server, 127.0.0.4, was switched off in the migration.
   networking.resolvconf.enable = false;
+  services.resolved.enable = false;  # the microVM turns it on; it would own resolv.conf
   environment.etc."resolv.conf" = {
     text = ''
       # DNS for shop.internal
