@@ -28,7 +28,9 @@ let
             TASK=${c.task} ANSWER=${c.answer} CHECK=${c.check} CHALLENGE=${challengeDir + "/${id}"}
           '' + builtins.readFile ./gym.sh;
         })
+        # Tools you would find on a typical server, so a missing command is never the puzzle.
         coreutils gnused gnugrep gawk findutils diffutils less vim nano
+        lsof psmisc file tree
       ];
 
       # Fresh copy of the starting files on every boot (/ is a tmpfs in the microVM).

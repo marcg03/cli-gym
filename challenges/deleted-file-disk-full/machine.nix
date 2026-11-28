@@ -16,8 +16,6 @@ let
   '';
 in
 {
-  environment.systemPackages = [ pkgs.lsof ];
-
   systemd.mounts = [{
     what = "tmpfs";
     where = "/var/log/ledger";
