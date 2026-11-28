@@ -21,7 +21,7 @@ Challenges:
 sed-fix-config           easy    edit a config file with one sed command
 deleted-file-disk-full   medium  rescue a deleted, still open log and free its disk
 out-of-inodes            medium  No space left on device, but df -h shows room
-dns-broken               medium  a hostname stopped resolving: hosts, resolv.conf, dig
+dns-broken               medium  dig resolves a name, ping does not
 borked-nginx             medium  nginx won't serve: config test, error log, unit limits
 ```
 

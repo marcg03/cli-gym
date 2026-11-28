@@ -1,3 +1,4 @@
+# Based on the SadServers scenario "Jakarta": it's always DNS (https://sadservers.com/scenario/jakarta).
 {
   title = "It's always DNS";
   difficulty = "medium";

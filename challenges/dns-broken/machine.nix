@@ -1,14 +1,11 @@
-# An internal DNS server and the shop API on this machine, and a resolver
-# setup left over from before last week's DNS migration. Everything lives on
-# loopback addresses (127.0.0.0/8), so no network is needed.
-{ pkgs, ... }:
-let
-  site = pkgs.writeTextDir "index.html" "shop api: ok\n";
-in
+# A DNS server for shop.internal on this machine, which works, and a resolver
+# setup on the same machine that never asks it. Everything is on loopback
+# addresses (127.0.0.0/8), so no network is needed.
+{ lib, pkgs, ... }:
 {
   environment.systemPackages = [ pkgs.dnsutils ];  # dig, host, nslookup
 
-  # The shop.internal zone, served by the new DNS server at 127.0.0.5.
+  # The shop.internal zone, served at 127.0.0.5.
   services.dnsmasq = {
     enable = true;
     resolveLocalQueries = false;
@@ -26,31 +23,38 @@ in
     };
   };
 
-  systemd.services.shop-api = {
-    description = "Shop API";
-    wantedBy = [ "multi-user.target" ];
-    serviceConfig.ExecStart = "${pkgs.darkhttpd}/bin/darkhttpd ${site} --addr 127.0.0.10 --port 80";
-  };
-
-  # The faults. Both files are plain, writable copies, not links into the Nix store.
-  # The old DNS server, 127.0.0.4, was switched off in the migration.
+  # A plain resolver, as on a small Debian or Ubuntu server: no name service
+  # cache, no systemd-resolved, and files the player can edit.
+  services.nscd.enable = false;
+  system.nssModules = lib.mkForce [ ];
+  services.resolved.enable = false;
   networking.resolvconf.enable = false;
-  services.resolved.enable = false;  # the microVM turns it on; it would own resolv.conf
   environment.etc."resolv.conf" = {
-    text = ''
-      # DNS for shop.internal
-      nameserver 127.0.0.4
+    text = "nameserver 127.0.0.5\n";
+    mode = "0644";
+  };
+  environment.etc.hosts.mode = "0644";
+
+  # The fault: the hosts line lists only "files", so DNS is never asked.
+  environment.etc."nsswitch.conf" = {
+    text = lib.mkForce ''
+      passwd:    files
+      group:     files
+      shadow:    files
+
+      hosts:     files
+      networks:  files
+
+      protocols: files
+      services:  files
+      ethers:    files
+      rpc:       files
     '';
     mode = "0644";
   };
-  # A workaround someone added during an outage, pointing at the API's old address.
-  networking.extraHosts = ''
-    127.0.0.20 api.shop.internal
-  '';
-  environment.etc.hosts.mode = "0644";
 
   systemd.services.gym-setup = {
-    requires = [ "dnsmasq.service" "shop-api.service" ];
-    after = [ "dnsmasq.service" "shop-api.service" ];
+    requires = [ "dnsmasq.service" ];
+    after = [ "dnsmasq.service" ];
   };
 }

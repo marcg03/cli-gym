@@ -1,50 +1,45 @@
 # Answer: it's always DNS
 
+Based on the SadServers scenario "Jakarta": it's always DNS.
+
 ```sh
-getent hosts api.shop.internal         # 127.0.0.20: not what DNS should say
-grep shop /etc/hosts                   # a stale workaround wins over DNS
-sed -i '/shop\.internal/d' /etc/hosts  # remove it
-cat /etc/resolv.conf                   # nameserver 127.0.0.4: the old server
-ss -lunp | grep :53                    # dnsmasq listens on 127.0.0.5
-dig @127.0.0.5 api.shop.internal       # the new server answers 127.0.0.10
-sed -i 's/^nameserver .*/nameserver 127.0.0.5/' /etc/resolv.conf
-curl http://api.shop.internal/         # shop api: ok
+ping -c 1 api.shop.internal        # Name or service not known
+cat /etc/hosts                     # nothing wrong
+cat /etc/resolv.conf               # nameserver 127.0.0.5
+dig api.shop.internal              # answers 127.0.0.10: DNS works
+getent hosts api.shop.internal     # nothing: programs don't get the answer
+cat /etc/nsswitch.conf             # hosts:     files    <- dns is missing
+sed -i 's/^hosts:.*/hosts:     files dns/' /etc/nsswitch.conf
+ping -c 1 api.shop.internal        # PING api.shop.internal (127.0.0.10)
 ```
 
 **Why it works**
 
-- Programs don't ask DNS directly. They call the C library, which follows the
-  `hosts:` line in `/etc/nsswitch.conf`, usually `files` first, then `dns`.
-  So an entry in `/etc/hosts` wins, and DNS is never asked.
-- `getent hosts <name>` resolves a name the same way programs do, through
-  nsswitch. It is the tool to see what curl will get.
-- `dig` and `host` skip nsswitch and `/etc/hosts`: they ask a DNS server
-  directly, the one in `/etc/resolv.conf` or the one you give with `@server`.
-  When `dig @server` works and `getent` doesn't, the fault is on this machine.
-- `/etc/resolv.conf` lists the DNS servers to ask (`nameserver` lines). Nothing
-  listens at 127.0.0.4 any more, so every DNS lookup failed.
-- `ss -lunp` lists listening UDP sockets with their process, which shows where the
-  DNS server really is. DNS uses port 53.
-
-There were two faults, and either one alone keeps curl broken. Fixing only
-resolv.conf leaves the stale hosts entry winning. Removing only the hosts entry
-gives `Could not resolve host`, because DNS goes to the dead server.
+- Programs don't talk to DNS themselves. They call the C library, and its
+  `hosts:` line in `/etc/nsswitch.conf` lists where to look for names, in order.
+  `files` is `/etc/hosts`, `dns` means the servers in `/etc/resolv.conf`.
+  With only `files`, DNS is never asked, and every name not in `/etc/hosts` fails.
+- `dig`, `host` and `nslookup` skip that path: they send DNS queries straight to
+  the server in `/etc/resolv.conf`. So "dig works, ping doesn't" points away from
+  the network and the DNS server, and at this machine's lookup configuration.
+- `getent hosts <name>` resolves a name exactly the way programs do, through
+  nsswitch. It's the tool to compare with `dig`.
+- The C library reads nsswitch.conf again when it changes, so new programs pick
+  up the fix with no restart.
 
 **The traps**
 
-- Correcting the address in `/etc/hosts` makes curl work for one name, and
-  every other `shop.internal` name still fails. The next time the API moves,
-  it breaks again, silently.
-- `dig` working doesn't mean programs will work, because dig never reads
-  `/etc/hosts`. Test with `getent hosts` or the program itself.
-- `ping` and `curl` errors mix up the two: "Could not connect" after a
-  name lookup can be a wrong address from the hosts file, not a dead server.
+- Adding the name to `/etc/hosts` makes ping work for one name, and every other
+  name still fails.
+- Restarting the DNS server, or editing resolv.conf, changes nothing: they were
+  never the problem. Check each layer before changing it.
+- On other systems the line is longer, for example
+  `hosts: files mymachines resolve [!UNAVAIL=return] myhostname dns` on systemd
+  distributions. The order matters: the first source with an answer wins.
 
 **Remember**
 
-- Order of lookup: `/etc/nsswitch.conf`, then `/etc/hosts`, then the servers in
-  `/etc/resolv.conf`.
-- `getent hosts` for what programs see, `dig @server` for what DNS says.
-- On many systems resolv.conf is generated (NetworkManager, systemd-resolved,
-  resolvconf, or NixOS's `networking.nameservers`), so a hand edit is a quick fix.
-  The lasting fix goes in whatever generates it.
+- Lookup path: `/etc/nsswitch.conf` decides, `/etc/hosts` is `files`,
+  `/etc/resolv.conf` is `dns`.
+- `dig` works but `getent hosts` doesn't: look at nsswitch.conf and /etc/hosts.
+- Both fail: look at resolv.conf and the DNS server.
