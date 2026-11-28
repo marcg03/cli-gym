@@ -23,6 +23,7 @@ deleted-file-disk-full   medium  rescue a deleted, still open log and free its d
 out-of-inodes            medium  No space left on device, but df -h shows room
 dns-broken               medium  dig resolves a name, ping does not
 borked-nginx             medium  nginx won't serve: config test, error log, unit limits
+hammered                 hard    investigate a breached server from its logs
 ```
 
 You are logged in as root in `/root`, and the task is shown on login:
