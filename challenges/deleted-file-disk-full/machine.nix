@@ -3,7 +3,7 @@
 let
   # The service appends a line every two seconds. Like many daemons it reopens
   # its log on SIGHUP, which is what logrotate should have sent it.
-  ledger = pkgs.writeShellScript "ledger" ''
+  ledger = pkgs.writeShellScriptBin "ledger" ''
     log=/var/log/ledger/ledger.log
     exec 3>>"$log"
     trap 'exec 3>>"$log"' HUP
@@ -11,7 +11,7 @@ let
     while true; do
       n=$((n + 1))
       echo "$(date -Is) txn $n settled" >&3
-      sleep 2
+      sleep 2 3>&-   # so sleep does not show up in lsof too
     done
   '';
 in
@@ -32,7 +32,7 @@ in
     requires = [ "var-log-ledger.mount" ];
     after = [ "var-log-ledger.mount" ];
     serviceConfig = {
-      ExecStart = ledger;
+      ExecStart = "${ledger}/bin/ledger";  # shows as "ledger" in ps and lsof
       ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
       Restart = "always";
     };
