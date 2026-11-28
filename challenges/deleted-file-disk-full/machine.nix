@@ -54,7 +54,7 @@ in
           echo "2026-11-$day audit: batch $i reconciled"
         done > audit-2026-11-$day.log
       done
-      yes "DEBUG ledger: dumping settlement cache entry, state=ok" | head -c 36M >> ledger.log
+      yes "DEBUG ledger: dumping settlement cache entry, state=ok" 2>/dev/null | head -c 36M >> ledger.log
       mv ledger.log ledger.log.1
       : > ledger.log
       rm ledger.log.1

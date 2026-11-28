@@ -38,7 +38,8 @@ let
         wantedBy = [ "multi-user.target" ];
         before = [ "getty.target" ];
         serviceConfig = { Type = "oneshot"; RemainAfterExit = true; };
-        script = lib.concatMapStrings (f: ''
+        # Starts with mkdir so the script is never empty (systemd refuses a unit without ExecStart).
+        script = "mkdir -p /root\n" + lib.concatMapStrings (f: ''
           cp --no-preserve=mode ${f} /root/${baseNameOf f}
         '') (c.files or [ ]);
       };
