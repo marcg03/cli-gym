@@ -3,6 +3,8 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    # Linux only: challenges are NixOS VMs.
+    systems.url = "github:nix-systems/default-linux";
     microvm = {
       url = "git+https://github.com/microvm-nix/microvm.nix?shallow=1";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -11,9 +13,9 @@
     };
   };
 
-  outputs = { nixpkgs, microvm, ... }:
+  outputs = { nixpkgs, microvm, systems, ... }:
     let
-      forAllSystems = f: nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system:
+      forAllSystems = f: nixpkgs.lib.genAttrs (import systems) (system:
         f (import ./lib {
           inherit (nixpkgs) lib;
           inherit nixpkgs microvm;
