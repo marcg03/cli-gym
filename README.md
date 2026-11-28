@@ -13,7 +13,7 @@ Challenges:
 
 ```
 sed-fix-config           easy    edit a config file with one sed command
-deleted-file-disk-full   medium  free a full disk held by a deleted, still open log
+deleted-file-disk-full   medium  rescue a deleted, still open log and free its disk
 ```
 
 You're logged in as root in `/root`:

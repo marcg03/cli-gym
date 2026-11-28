@@ -54,7 +54,10 @@ in
           echo "2026-11-$day audit: batch $i reconciled"
         done > audit-2026-11-$day.log
       done
+      # These two marker lines are what the check looks for in the rescued copy.
+      echo "2026-11-27T00:00:00+00:00 settlement day 2026-11-27 opened" >> ledger.log
       yes "DEBUG ledger: dumping settlement cache entry, state=ok" 2>/dev/null | head -c 36M >> ledger.log
+      printf '\n%s\n' "2026-11-27T23:59:59+00:00 settlement day 2026-11-27 closed, 18204 txns" >> ledger.log
       mv ledger.log ledger.log.1
       : > ledger.log
       rm ledger.log.1
