@@ -7,7 +7,7 @@ systemctl is-active --quiet dnsmasq || fail "the DNS server should be running" \
 
 for name in api.shop.internal db.shop.internal status.shop.internal; do
   want=$(dig +short @127.0.0.5 "$name" A)
-  got=$(getent ahostsv4 "$name" | awk 'NR == 1 { print $1 }')
+  got=$(getent hosts "$name" | awk 'NR == 1 { print $1 }')
   [ "$got" = "$want" ] || fail "$name should resolve to its DNS address" \
     "expected: $want (what the DNS server at 127.0.0.5 says)" "got:      ${got:-nothing}" \
     "getent hosts $name shows what programs see; dig asks a DNS server directly"
